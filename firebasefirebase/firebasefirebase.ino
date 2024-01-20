@@ -2,12 +2,22 @@
 #include <Firebase.h>
 #include <FirebaseFS.h>
 
+//#include <OneWire.h>
+//#include <DallasTemperature.h>
+
+//const int oneWireBus = 0; 
+const int moisturePin =A0;
+//OneWire oneWire(oneWireBus);
+//DallasTemperature sensors(&oneWire);
+
 /*Define the WiFi credentials */
 // #define WIFI_SSID "iPhone"
 // #define WIFI_PASSWORD "nopassword"
-#define WIFI_SSID "Hackathone_worldlink_Wi-Fi"
-#define WIFI_PASSWORD "Hackathon@123"
+//#define WIFI_SSID "Hackathone_worldlink_Wi-Fi"
+//#define WIFI_PASSWORD "Hackathon@123"
 
+#define WIFI_SSID "Room-214"
+#define WIFI_PASSWORD "room@214"
 // For the following credentials, see examples/Authentications/SignInAsUser/EmailPassword/EmailPassword.ino
 
 /* Define the API Key */
@@ -32,6 +42,8 @@
 #include <addons/TokenHelper.h>
 // Provide the RTDB payload printing info and other helper functions.
 #include <addons/RTDBHelper.h>
+
+
 DHT dht(DHTPIN, DHTTYPE);
 
 // Define Firebase Data object
@@ -42,9 +54,9 @@ FirebaseConfig config;
 
 unsigned long sendDataPrevMillis =0;
 
-unsigned long count = 0;
 void setup() {
   Serial.begin(115200);
+  //sensors.begin();
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to Wi-Fi");
   unsigned long ms = millis();
@@ -52,7 +64,7 @@ void setup() {
   {
     Serial.print(".");
     delay(300);
-    yield();
+    yield(); 
   }
   Serial.println();
   Serial.print("Connected with IP: ");
@@ -78,18 +90,18 @@ void setup() {
 
   // Comment or pass false value when WiFi reconnection will 
  // control by your code or third party library e.g. WiFiManager
- //Firebase.reconnectNetwork(true);
+ Firebase.reconnectNetwork(true);
 
   // Since v4.4.x, BearSSL engine was used, the SSL buffer 
   //need to be set.
   // Large data transmission may require larger RX buffer, 
   //otherwise connection issue or data read time out can 
   //be occurred.
-  //fbdo.setBSSLBufferSize(4096 /* Rx buffer size in bytes from 512 - 16384 */, 1024 /* Tx buffer size in bytes from 512 - 16384 */);
+  fbdo.setBSSLBufferSize(4096 /* Rx buffer size in bytes from 512 - 16384 */, 1024 /* Tx buffer size in bytes from 512 - 16384 */);
   Serial.println("hello from end of the setup");
 
   Firebase.begin(&config, &auth);
-  //Firebase.setDoubleDigits(5);
+  Firebase.setDoubleDigits(5);
   // for dht sensor
   dht.begin();
 }
@@ -101,7 +113,11 @@ void loop() {
   Serial.println("hello from Loop");
   float humidity = dht.readHumidity();
   float temperature = dht.readTemperature();
-
+  
+  //sensors.requestTemperatures(); 
+  //float soilTemperature = sensors.getTempCByIndex(0);
+  float soilMoistureTemp =analogRead(moisturePin);
+  float soilMoisture=map(soilMoistureTemp,0,1023,0,100);
   if (isnan(humidity) || isnan(temperature)) {
     Serial.println("Failed to read from DHT sensor!");
     return;
@@ -110,16 +126,22 @@ void loop() {
   if (Firebase.ready() && (millis() - sendDataPrevMillis > 15000 
       || sendDataPrevMillis == 0)){
     sendDataPrevMillis = millis();
-    Serial.printf("Set int... %s\n", Firebase.setFloat(fbdo, F("/test/humit"), humidity) ? "ok" : fbdo.errorReason().c_str());
-    Serial.printf("Set int... %s\n", Firebase.setFloat(fbdo, F("/test/temp"), temperature) ? "ok" : fbdo.errorReason().c_str());
+    Serial.printf("Set float... %s\n", Firebase.setFloat(fbdo, F("/test/humidity"), humidity) ? "ok" : fbdo.errorReason().c_str());
+    Serial.printf("Set float... %s\n", Firebase.setFloat(fbdo, F("/test/temp"), temperature) ? "ok" : fbdo.errorReason().c_str());
+    // for soil-temperature and moisture
+    // Serial.printf("Set float... %s\n", Firebase.setFloat(fbdo, F("/test/soilTemp"), soilTemperature) ? "ok" : fbdo.errorReason().c_str());
+    Serial.printf("Set Float... %s\n", Firebase.setFloat(fbdo, F("/test/soilMoisture"), soilMoisture) ? "ok" : fbdo.errorReason().c_str());
   }
   Serial.print("Humidity: ");
   Serial.print(humidity);
   Serial.print(" %\t");
-
   Serial.print("Temperature: ");
   Serial.print(temperature);
-  Serial.println(" °C");
+  Serial.println(" °C\t");
+  Serial.print("Soil Moisture: ");
+  Serial.print(soilMoisture);
+  Serial.println("%");
+  Serial.print("\n");
   delay(1000);
   yield();
 }
