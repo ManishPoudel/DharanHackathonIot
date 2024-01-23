@@ -2,22 +2,14 @@
 #include <Firebase.h>
 #include <FirebaseFS.h>
 
-//#include <OneWire.h>
-//#include <DallasTemperature.h>
-
-//const int oneWireBus = 0; 
 const int moisturePin =A0;
-//OneWire oneWire(oneWireBus);
-//DallasTemperature sensors(&oneWire);
-
 /*Define the WiFi credentials */
 // #define WIFI_SSID "iPhone"
 // #define WIFI_PASSWORD "nopassword"
 //#define WIFI_SSID "Hackathone_worldlink_Wi-Fi"
 //#define WIFI_PASSWORD "Hackathon@123"
-
-#define WIFI_SSID "Room-214"
-#define WIFI_PASSWORD "room@214"
+#define WIFI_SSID "Room-114"
+#define WIFI_PASSWORD "room@114"
 // For the following credentials, see examples/Authentications/SignInAsUser/EmailPassword/EmailPassword.ino
 
 /* Define the API Key */
@@ -40,23 +32,27 @@ const int moisturePin =A0;
 #include <DHT_U.h>
 // Provide the token generation process info.
 #include <addons/TokenHelper.h>
-// Provide the RTDB payload printing info and other helper functions.
+// Provide thde RTDB payload printing info and other helper functions.
 #include <addons/RTDBHelper.h>
-
 
 DHT dht(DHTPIN, DHTTYPE);
 
 // Define Firebase Data object
 FirebaseData fbdo;
-
 FirebaseAuth auth;
 FirebaseConfig config;
 
 unsigned long sendDataPrevMillis =0;
 
+// d0
+int redPin=D0;
+// d5
+int bluePin=D5;
+// d3
+int greenPin=D3;
+
 void setup() {
   Serial.begin(115200);
-  //sensors.begin();
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to Wi-Fi");
   unsigned long ms = millis();
@@ -66,6 +62,11 @@ void setup() {
     delay(300);
     yield(); 
   }
+  pinMode(redPin,OUTPUT);
+  pinMode(bluePin,OUTPUT);
+  pinMode(greenPin,OUTPUT);
+
+    digitalWrite(redPin,HIGH);
   Serial.println();
   Serial.print("Connected with IP: ");
   Serial.println(WiFi.localIP());
@@ -97,41 +98,80 @@ void setup() {
   // Large data transmission may require larger RX buffer, 
   //otherwise connection issue or data read time out can 
   //be occurred.
-  fbdo.setBSSLBufferSize(4096 /* Rx buffer size in bytes from 512 - 16384 */, 1024 /* Tx buffer size in bytes from 512 - 16384 */);
+  fbdo.setBSSLBufferSize(4096 /* Rx buffer size in bytes 
+  from 512 - 16384 */, 1024 /* Tx buffer size in bytes 
+  from 512 - 16384 */);
+
+    // for debugging.
   Serial.println("hello from end of the setup");
 
   Firebase.begin(&config, &auth);
   Firebase.setDoubleDigits(5);
+
   // for dht sensor
   dht.begin();
 }
 
 void loop() {
-  
-  //delay(2000);  // Delay between readings
-  //yield();
+
+    // for debugging.
   Serial.println("hello from Loop");
+
+    // for dht 11 sensor
   float humidity = dht.readHumidity();
   float temperature = dht.readTemperature();
-  
-  //sensors.requestTemperatures(); 
-  //float soilTemperature = sensors.getTempCByIndex(0);
-  float soilMoistureTemp =analogRead(moisturePin);
-  float soilMoisture=map(soilMoistureTemp,0,1023,0,100);
+  int warning=0;
+
   if (isnan(humidity) || isnan(temperature)) {
     Serial.println("Failed to read from DHT sensor!");
     return;
   }
-  
-  if (Firebase.ready() && (millis() - sendDataPrevMillis > 15000 
-      || sendDataPrevMillis == 0)){
-    sendDataPrevMillis = millis();
+
+    // for soil moisture.
+  float soilMoistureTemp =analogRead(moisturePin);
+  float soilMoisture=map(soilMoistureTemp,0,1023,5,95);
+
+    if(humidity<30.00){
+        warning=1;// for watering the plant.
+    }
+    else if(temperature >42.00){
+        warning=2; // too much heat for the plant.
+        // might need shade or watering.
+    }
+    else if(soilMoisture<75.00){
+        warning=3;
+        // Emergency watering to plants needed.
+    }
+
+    if(warning==1 || warning == 3 ){
+        digitalWrite(redPin,HIGH);
+        digitalWrite(greenPin,LOW);
+        digitalWrite(bluePin,LOW);
+    }
+    else if(warning==2){
+        digitalWrite(bluePin,HIGH);
+        digitalWrite(greenPin,LOW);
+        digitalWrite(redPin,LOW);
+    }else{
+        digitalWrite(greenPin,HIGH);
+        digitalWrite(redPin,LOW);
+        digitalWrite(bluePin,LOW);
+    }
+
+  if (Firebase.ready() //&& (millis() - sendDataPrevMillis > 15000 
+      /*|| sendDataPrevMillis == 0)*/){
+    //sendDataPrevMillis = millis();
     Serial.printf("Set float... %s\n", Firebase.setFloat(fbdo, F("/test/humidity"), humidity) ? "ok" : fbdo.errorReason().c_str());
     Serial.printf("Set float... %s\n", Firebase.setFloat(fbdo, F("/test/temp"), temperature) ? "ok" : fbdo.errorReason().c_str());
+
     // for soil-temperature and moisture
-    // Serial.printf("Set float... %s\n", Firebase.setFloat(fbdo, F("/test/soilTemp"), soilTemperature) ? "ok" : fbdo.errorReason().c_str());
     Serial.printf("Set Float... %s\n", Firebase.setFloat(fbdo, F("/test/soilMoisture"), soilMoisture) ? "ok" : fbdo.errorReason().c_str());
+    
+    // for warning system.
+    Serial.printf("Set int... %s\n", Firebase.setInt(fbdo, F("/test/warning"), warning) ? "ok" : fbdo.errorReason().c_str());
+    delay(1000);
   }
+
   Serial.print("Humidity: ");
   Serial.print(humidity);
   Serial.print(" %\t");
@@ -143,5 +183,7 @@ void loop() {
   Serial.println("%");
   Serial.print("\n");
   delay(1000);
+  // yeild is used to pass control to other task if 
+  // loop is too long
   yield();
 }
